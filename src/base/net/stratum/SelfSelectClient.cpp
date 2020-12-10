@@ -31,9 +31,11 @@
 #include "base/io/json/Json.h"
 #include "base/io/json/JsonRequest.h"
 #include "base/io/log/Log.h"
+#include "base/io/log/Tags.h"
 #include "base/net/http/Fetch.h"
 #include "base/net/http/HttpData.h"
 #include "base/net/stratum/Client.h"
+#include "base/net/stratum/DaemonClient.h"
 
 
 namespace xmrig {
@@ -58,19 +60,22 @@ xmrig::SelfSelectClient::SelfSelectClient(int id, const char *agent, IClientList
     m_listener(listener)
 {
     m_httpListener  = std::make_shared<HttpListener>(this);
-    m_client        = new Client(id, agent, this);
+    m_client = new Client(id, agent, this);
+    m_proxy = new DaemonClient(id, listener);
 }
 
 
 xmrig::SelfSelectClient::~SelfSelectClient()
 {
     delete m_client;
+    delete m_proxy;
 }
 
 
 void xmrig::SelfSelectClient::tick(uint64_t now)
 {
     m_client->tick(now);
+    m_proxy->tick(now);
 
     if (m_state == RetryState) {
         if (Chrono::steadyMSecs() - m_timestamp < m_retryPause) {
@@ -235,6 +240,103 @@ void xmrig::SelfSelectClient::submitBlockTemplate(rapidjson::Value &result)
     });
 }
 
+int64_t xmrig::SelfSelectClient::submit(const JobResult& result)
+{
+    LOG_INFO("%s" GREEN_BOLD(" SelfSelectClient") BLACK_BOLD(" test"), Tags::proxy());
+    m_proxy->submit(result); //This throws an exception
+    return m_client->submit(result);
+}
+
+//int64_t xmrig::DaemonClient::submit(const JobResult& result)
+//{
+//    if (result.jobId != (m_blocktemplate.data() + m_blocktemplate.size() - 32)) {
+//        return -1;
+//    }
+//
+//    char* data = (m_apiVersion == API_DERO) ? m_blockhashingblob.data() : m_blocktemplate.data();
+//
+//#   ifdef XMRIG_PROXY_PROJECT
+//    memcpy(data + 78, result.nonce, 8);
+//#   else
+//    Buffer::toHex(reinterpret_cast<const uint8_t*>(&result.nonce), 4, data + 78);
+//#   endif
+//
+//    using namespace rapidjson;
+//    Document doc(kObjectType);
+//
+//    Value params(kArrayType);
+//    if (m_apiVersion == API_DERO) {
+//        params.PushBack(m_blocktemplate.toJSON(), doc.GetAllocator());
+//        params.PushBack(m_blockhashingblob.toJSON(), doc.GetAllocator());
+//    }
+//    else {
+//        params.PushBack(m_blocktemplate.toJSON(), doc.GetAllocator());
+//    }
+//
+//    JsonRequest::create(doc, m_sequence, "submitblock", params);
+//
+//#   ifdef XMRIG_PROXY_PROJECT
+//    m_results[m_sequence] = SubmitResult(m_sequence, result.diff, result.actualDiff(), result.id, 0);
+//#   else
+//    m_results[m_sequence] = SubmitResult(m_sequence, result.diff, result.actualDiff(), 0, result.backend);
+//#   endif
+//
+//    return rpcSend(doc);
+//}
+
+//int64_t xmrig::Client::submit(const JobResult& result)
+//{
+//#   ifndef XMRIG_PROXY_PROJECT
+//    if (result.clientId != m_rpcId || m_rpcId.isNull() || m_state != ConnectedState) {
+//        return -1;
+//    }
+//#   endif
+//
+//    if (result.diff == 0) {
+//        close();
+//
+//        return -1;
+//    }
+//
+//    using namespace rapidjson;
+//
+//#   ifdef XMRIG_PROXY_PROJECT
+//    const char* nonce = result.nonce;
+//    const char* data = result.result;
+//#   else
+//    char* nonce = m_sendBuf.data();
+//    char* data = m_sendBuf.data() + 16;
+//
+//    Buffer::toHex(reinterpret_cast<const char*>(&result.nonce), 4, nonce);
+//    nonce[8] = '\0';
+//
+//    Buffer::toHex(result.result(), 32, data);
+//    data[64] = '\0';
+//#   endif
+//
+//    Document doc(kObjectType);
+//    auto& allocator = doc.GetAllocator();
+//
+//    Value params(kObjectType);
+//    params.AddMember("id", StringRef(m_rpcId.data()), allocator);
+//    params.AddMember("job_id", StringRef(result.jobId.data()), allocator);
+//    params.AddMember("nonce", StringRef(nonce), allocator);
+//    params.AddMember("result", StringRef(data), allocator);
+//
+//    if (has<EXT_ALGO>() && result.algorithm.isValid()) {
+//        params.AddMember("algo", StringRef(result.algorithm.shortName()), allocator);
+//    }
+//
+//    JsonRequest::create(doc, m_sequence, "submit", params);
+//
+//#   ifdef XMRIG_PROXY_PROJECT
+//    m_results[m_sequence] = SubmitResult(m_sequence, result.diff, result.actualDiff(), result.id, 0);
+//#   else
+//    m_results[m_sequence] = SubmitResult(m_sequence, result.diff, result.actualDiff(), 0, result.backend);
+//#   endif
+//
+//    return send(doc);
+//}
 
 void xmrig::SelfSelectClient::onHttpData(const HttpData &data)
 {

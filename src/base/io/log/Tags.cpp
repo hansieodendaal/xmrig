@@ -36,6 +36,12 @@ const char *xmrig::Tags::network()
     return tag;
 }
 
+const char* xmrig::Tags::proxy()
+{
+    static const char* tag = YELLOW_BG_BOLD(WHITE_BOLD_S " proxy   ");
+
+    return tag;
+}
 
 const char *xmrig::Tags::signal()
 {

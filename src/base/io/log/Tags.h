@@ -31,7 +31,8 @@ class Tags
 {
 public:
     static const char *config();
-    static const char *network();
+    static const char* network();
+    static const char* proxy();
     static const char *signal();
 
 #   ifdef XMRIG_MINER_PROJECT
