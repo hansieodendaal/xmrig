@@ -65,7 +65,7 @@ protected:
     inline int64_t send(const rapidjson::Value &obj, Callback callback) override    { return m_client->send(obj, callback); }
     inline int64_t send(const rapidjson::Value &obj) override                       { return m_client->send(obj); }
     inline int64_t sequence() const override                                        { return m_client->sequence(); }
-    //inline int64_t submit(const JobResult &result) override                         { return m_client->submit(result); }
+    inline int64_t submit(const JobResult& result) override;
     inline void connect() override                                                  { m_client->connect(); }
     inline void connect(const Pool &pool) override                                  { m_client->connect(pool); }
     inline void deleteLater() override                                              { m_client->deleteLater(); }
@@ -105,12 +105,10 @@ private:
     void retry();
     void setState(State state);
     void submitBlockTemplate(rapidjson::Value &result);
-    inline int64_t submit(const JobResult& result);
-
+    inline void submit_origin_daemon(const JobResult &result);
     bool m_active           = false;
     bool m_quiet            = false;
     IClient* m_client;
-    IClient* m_proxy;
     IClientListener *m_listener;
     int m_retries           = 5;
     int64_t m_failures      = 0;
