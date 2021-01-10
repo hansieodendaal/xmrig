@@ -62,11 +62,6 @@ public:
     constexpr static uint64_t kConnectTimeout   = 20 * 1000;
     constexpr static uint64_t kResponseTimeout  = 20 * 1000;
     constexpr static size_t kMaxSendBufferSize  = 1024 * 16;
-
-    inline std::vector<char>* getSendBuf() { return &m_sendBuf; }
-    inline String* getRpcID() { return &m_rpcId; }
-    template<Extension ext> inline bool has() const noexcept        { return m_extensions.test(ext); }
-
     Client(int id, const char *agent, IClientListener *listener);
     ~Client() override;
 
@@ -126,6 +121,7 @@ private:
     inline SocketState state() const                                { return m_state; }
     inline uv_stream_t *stream() const                              { return reinterpret_cast<uv_stream_t *>(m_socket); }
     inline void setExtension(Extension ext, bool enable) noexcept   { m_extensions.set(ext, enable); }
+    template<Extension ext> inline bool has() const noexcept        { return m_extensions.test(ext); }
 
     static void onClose(uv_handle_t *handle);
     static void onConnect(uv_connect_t *req, int status);

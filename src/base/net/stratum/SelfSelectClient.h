@@ -114,6 +114,7 @@ private:
     int64_t m_failures      = 0;
     int64_t m_sequence      = 1;
     Job m_job;
+    String m_blocktemplate;
     State m_state           = IdleState;
     std::shared_ptr<IHttpListener> m_httpListener;
     uint64_t m_retryPause   = 5000;

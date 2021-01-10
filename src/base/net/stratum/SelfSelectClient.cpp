@@ -212,7 +212,7 @@ void xmrig::SelfSelectClient::submitBlockTemplate(rapidjson::Value &result)
     params.AddMember(StringRef(kPrevHash),      result[kPrevHash], allocator);
     params.AddMember(StringRef(kSeedHash),      result[kSeedHash], allocator);
     params.AddMember(StringRef(kNextSeedHash),  result[kNextSeedHash], allocator);
-
+    m_blocktemplate = kBlob;
     JsonRequest::create(doc, sequence(), "block_template", params);
 
     send(doc, [this](const rapidjson::Value &result, bool success, uint64_t) {
@@ -245,38 +245,21 @@ int64_t xmrig::SelfSelectClient::submit(const JobResult& result)
 
 void xmrig::SelfSelectClient::submit_origin_daemon(const JobResult& result)
 {
-    LOG_INFO("%s" GREEN_BOLD(" SelfSelectClient") BLACK_BOLD("Submitting to origin"), Tags::proxy());
+    LOG_INFO("%s" GREEN_BOLD(" SelfSelectClient") BLACK_BOLD(" Submitting to origin"), Tags::proxy());
 
     if (result.diff == 0) {
         return;
     }
+    char *data = m_blocktemplate.data();
+
+    Buffer::toHex(reinterpret_cast<const uint8_t *>(&result.nonce), 4, data + 78);
 
     using namespace rapidjson;
-
-    auto client = reinterpret_cast<Client*>(m_client);
-    char *nonce = client->getSendBuf()->data();
-    char *data  = client->getSendBuf()->data() + 16;
-
-    Buffer::toHex(reinterpret_cast<const char*>(&result.nonce), 4, nonce);
-    nonce[8] = '\0';
-
-    Buffer::toHex(result.result(), 32, data);
-    data[64] = '\0';
-
     Document doc(kObjectType);
-    auto &allocator = doc.GetAllocator();
+    Value params(kArrayType);
+    params.PushBack(m_blocktemplate.toJSON(), doc.GetAllocator());
 
-    Value params(kObjectType);
-    params.AddMember("id",     StringRef(client->getRpcID()->data()), allocator);
-    params.AddMember("job_id", StringRef(result.jobId.data()), allocator);
-    params.AddMember("nonce",  StringRef(nonce), allocator);
-    params.AddMember("result", StringRef(data), allocator);
-
-    if (client->has<EXT_ALGO>() && result.algorithm.isValid()) {
-        params.AddMember("algo", StringRef(result.algorithm.shortName()), allocator);
-    }
-
-    JsonRequest::create(doc, m_sequence, "submit", params);
+    JsonRequest::create(doc, m_sequence, "submitblock", params);
 
     FetchRequest req(HTTP_POST, pool().daemon().host(), pool().daemon().port(), "/json_rpc", doc, pool().daemon().isTLS(), isQuiet());
     fetch(std::move(req), m_httpListener);
