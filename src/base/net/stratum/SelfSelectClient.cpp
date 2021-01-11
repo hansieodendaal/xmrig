@@ -203,6 +203,8 @@ void xmrig::SelfSelectClient::submitBlockTemplate(rapidjson::Value &result)
     Document doc(kObjectType);
     auto &allocator = doc.GetAllocator();
 
+    m_blocktemplate = Json::getString(result,kBlocktemplateBlob);
+
     Value params(kObjectType);
     params.AddMember(StringRef(kId),            m_job.clientId().toJSON(), allocator);
     params.AddMember(StringRef(kJobId),         m_job.id().toJSON(), allocator);
@@ -212,7 +214,7 @@ void xmrig::SelfSelectClient::submitBlockTemplate(rapidjson::Value &result)
     params.AddMember(StringRef(kPrevHash),      result[kPrevHash], allocator);
     params.AddMember(StringRef(kSeedHash),      result[kSeedHash], allocator);
     params.AddMember(StringRef(kNextSeedHash),  result[kNextSeedHash], allocator);
-    m_blocktemplate = kBlob;
+
     JsonRequest::create(doc, sequence(), "block_template", params);
 
     send(doc, [this](const rapidjson::Value &result, bool success, uint64_t) {
