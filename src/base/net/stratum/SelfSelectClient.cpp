@@ -250,7 +250,7 @@ int64_t xmrig::SelfSelectClient::submit(const JobResult& result)
 
 void xmrig::SelfSelectClient::submitOriginDaemon(const JobResult& result)
 {
-    if (m_targetdiff !=0 && result.actualDiff() < m_targetdiff) {
+    if (m_targetdiff ==0 || result.actualDiff() < m_targetdiff) {
         return;
     }
 
