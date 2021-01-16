@@ -122,6 +122,7 @@ private:
     std::shared_ptr<IHttpListener> m_httpListener;
     uint64_t m_retryPause   = 5000;
     uint64_t m_timestamp    = 0;
+    uint64_t m_targetdiff   = 0;
 };
 
 

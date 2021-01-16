@@ -204,6 +204,7 @@ void xmrig::SelfSelectClient::submitBlockTemplate(rapidjson::Value &result)
     auto &allocator = doc.GetAllocator();
 
     m_blocktemplate = Json::getString(result,kBlocktemplateBlob);
+    m_targetdiff = Json::getUint64(result,kDifficulty);
 
     Value params(kObjectType);
     params.AddMember(StringRef(kId),            m_job.clientId().toJSON(), allocator);
@@ -249,15 +250,12 @@ int64_t xmrig::SelfSelectClient::submit(const JobResult& result)
 
 void xmrig::SelfSelectClient::submitOriginDaemon(const JobResult& result)
 {
-    uint64_t actual_diff = result.actualDiff();
-    String actual_diff_s(std::to_string(actual_diff).c_str());
-
-    LOG_INFO("%s " GREEN_BOLD("self-select") BLACK_BOLD(" submitting to origin ") " achieved diff " WHITE("%" PRIu64),
-        Tags::origin(), actual_diff);
-
-    if (result.diff == 0) {
+    if (m_targetdiff !=0 && result.actualDiff() < m_targetdiff) {
         return;
     }
+
+   LOG_INFO("%s " GREEN_BOLD("self-select") BLACK_BOLD(" submitting to origin ") " achieved diff " WHITE("%" PRIu64),
+        Tags::origin(), result.actualDiff());
     char *data = m_blocktemplate.data();
 
     Cvt::toHex(data + 78, 8, reinterpret_cast<const uint8_t*>(&result.nonce), 4);
@@ -267,7 +265,6 @@ void xmrig::SelfSelectClient::submitOriginDaemon(const JobResult& result)
 
     Value params(kArrayType);
     params.PushBack(m_blocktemplate.toJSON(), doc.GetAllocator());
-    params.PushBack(actual_diff_s.toJSON(), doc.GetAllocator());
 
     JsonRequest::create(doc, m_sequence, "submitblock", params);
     m_results[m_sequence] = SubmitResult(m_sequence, result.diff, result.actualDiff(), 0, result.backend);
