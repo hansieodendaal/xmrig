@@ -31,9 +31,11 @@
 #include "base/io/json/Json.h"
 #include "base/io/json/JsonRequest.h"
 #include "base/io/log/Log.h"
+#include "base/io/log/Tags.h"
 #include "base/net/http/Fetch.h"
 #include "base/net/http/HttpData.h"
 #include "base/net/stratum/Client.h"
+#include "net/JobResult.h"
 
 
 namespace xmrig {
@@ -54,8 +56,8 @@ static const char * const required_fields[] = { kBlocktemplateBlob, kBlockhashin
 } /* namespace xmrig */
 
 
-xmrig::SelfSelectClient::SelfSelectClient(int id, const char *agent, IClientListener *listener) :
-    m_listener(listener)
+xmrig::SelfSelectClient::SelfSelectClient(int id, const char *agent, IClientListener *listener, bool submit_to_origin) :
+    m_listener(listener), m_submit_to_origin(submit_to_origin)
 {
     m_httpListener  = std::make_shared<HttpListener>(this);
     m_client        = new Client(id, agent, this);
@@ -201,6 +203,9 @@ void xmrig::SelfSelectClient::submitBlockTemplate(rapidjson::Value &result)
     Document doc(kObjectType);
     auto &allocator = doc.GetAllocator();
 
+    m_blocktemplate = Json::getString(result,kBlocktemplateBlob);
+    m_targetdiff = Json::getUint64(result, kDifficulty);
+
     Value params(kObjectType);
     params.AddMember(StringRef(kId),            m_job.clientId().toJSON(), allocator);
     params.AddMember(StringRef(kJobId),         m_job.id().toJSON(), allocator);
@@ -235,6 +240,49 @@ void xmrig::SelfSelectClient::submitBlockTemplate(rapidjson::Value &result)
     });
 }
 
+int64_t xmrig::SelfSelectClient::submit(const JobResult& result)
+{
+    if (m_submit_to_origin) {
+        submitOriginDaemon(result);
+    }
+    return m_client->submit(result);
+}
+
+void xmrig::SelfSelectClient::submitOriginDaemon(const JobResult& result)
+{
+    if (result.diff == 0) {
+        return;
+    }
+    
+    if (result.actualDiff() < m_targetdiff) {
+        m_origin_rejected++;
+        LOG_INFO("%s " RED_BOLD("origin daemon rejected") " (%" PRId64 "/%" PRId64 ") "
+            BLACK_BOLD(" diff ") BLACK_BOLD("%" PRIu64) BLACK_BOLD(" vs. ") BLACK_BOLD("%" PRIu64),
+            Tags::origin(), m_origin_accepted, m_origin_rejected, m_targetdiff, result.actualDiff());
+        return;
+    }
+    char *data = m_blocktemplate.data();
+    Buffer::toHex(reinterpret_cast<const uint8_t*>(&result.nonce), 4, data + 78);
+
+    using namespace rapidjson;
+    Document doc(kObjectType);
+
+    Value params(kArrayType);
+    params.PushBack(m_blocktemplate.toJSON(), doc.GetAllocator());
+    String origin_info("self-select with submit-to-origin");
+    params.PushBack(origin_info.toJSON(), doc.GetAllocator());
+
+    JsonRequest::create(doc, m_sequence, "submitblock", params);
+    m_results[m_sequence] = SubmitResult(m_sequence, result.diff, result.actualDiff(), 0, result.backend);
+
+    FetchRequest req(HTTP_POST, pool().daemon().host(), pool().daemon().port(), "/json_rpc", doc, pool().daemon().isTLS(), isQuiet());
+    fetch(std::move(req), m_httpListener);
+
+    m_origin_accepted++;
+    LOG_INFO("%s " GREEN_BOLD("origin daemon accepted") " (%" PRId64 "/%" PRId64 ") " 
+        " diff " WHITE("%" PRIu64) " vs. " WHITE("%" PRIu64),
+        Tags::origin(), m_origin_accepted, m_origin_rejected, m_targetdiff, result.actualDiff(), result.diff);
+}
 
 void xmrig::SelfSelectClient::onHttpData(const HttpData &data)
 {
